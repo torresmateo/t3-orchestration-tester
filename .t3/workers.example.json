@@ -1,0 +1,40 @@
+{
+  "_comment": "Copy to .t3/local/workers.json (gitignored). The driver re-reads it before EVERY delegate_task, so editing it between waves switches provider/model without restarting the driver. providerInstanceId and model must exist in orchestrator_capabilities and be able to run child tasks (canRunChildTask). options are the per-model options from orchestrator_capabilities (e.g. effort for Claude, variant for OpenCode).",
+  "roles": {
+    "implementer": "claude-opus-high",
+    "reviewer": "opencode-deepseek"
+  },
+  "presets": {
+    "claude-opus-high": {
+      "providerInstanceId": "claudeAgent",
+      "model": "claude-opus-5-5",
+      "options": { "effort": "high" }
+    },
+    "claude-sonnet-high": {
+      "providerInstanceId": "claudeAgent",
+      "model": "claude-sonnet-5-5",
+      "options": { "effort": "high" }
+    },
+    "claude-haiku": {
+      "providerInstanceId": "claudeAgent",
+      "model": "claude-haiku-5-5",
+      "options": { "effort": "medium" }
+    },
+    "opencode-deepseek": {
+      "providerInstanceId": "opencode",
+      "model": "opencode-go/deepseek-v4-pro",
+      "options": { "variant": "high" }
+    },
+    "opencode-sonnet": {
+      "providerInstanceId": "opencode",
+      "model": "opencode/claude-sonnet-5-5",
+      "options": { "variant": "high" }
+    },
+    "opencode-opus": {
+      "providerInstanceId": "opencode",
+      "model": "opencode/claude-opus-5-5",
+      "options": { "variant": "high" }
+    }
+  },
+  "_note": "These preset names point at providers available at time of writing. Re-check with orchestrator_capabilities on your machine before trusting them; add a preset for any new provider the same way. Keep implementer and reviewer on different vendors when you can, so the reviewer does not share the implementer's blind spots."
+}

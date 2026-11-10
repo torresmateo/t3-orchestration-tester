@@ -1,0 +1,23 @@
+# Per-worktree bindings written by scripts/t3-setup.sh
+.env
+.env.local
+.env.*.local
+
+# T3 — role prompts in .t3/ are committed and public-safe. Everything under
+# local/ is machine-specific: env.md holds a couple of non-derivable facts,
+# human/ is the operator's gate briefs, state/ is the driver's journal.
+.t3/local/
+
+# Local-only agent config
+.claude/settings.local.json
+.claude/worktrees/
+.mcp.json
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Dependencies
+node_modules/
