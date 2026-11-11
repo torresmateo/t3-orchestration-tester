@@ -15,6 +15,11 @@
       "model": "claude-sonnet-5-5",
       "options": { "effort": "high" }
     },
+    "claude-fable-high": {
+      "providerInstanceId": "claudeAgent",
+      "model": "claude-fable-5-2",
+      "options": { "effort": "high" }
+    },
     "claude-haiku": {
       "providerInstanceId": "claudeAgent",
       "model": "claude-haiku-5-5",
@@ -24,17 +29,8 @@
       "providerInstanceId": "opencode",
       "model": "opencode-go/deepseek-v4-pro",
       "options": { "variant": "high" }
-    },
-    "opencode-sonnet": {
-      "providerInstanceId": "opencode",
-      "model": "opencode/claude-sonnet-5-5",
-      "options": { "variant": "high" }
-    },
-    "opencode-opus": {
-      "providerInstanceId": "opencode",
-      "model": "opencode/claude-opus-5-5",
-      "options": { "variant": "high" }
     }
   },
-  "_note": "These preset names point at providers available at time of writing. Re-check with orchestrator_capabilities on your machine before trusting them; add a preset for any new provider the same way. Keep implementer and reviewer on different vendors when you can, so the reviewer does not share the implementer's blind spots."
+  "_effort_levels": "claudeAgent effort: low | medium | high | xhigh | max | ultrathink. opencode variant: low | medium | high | xhigh | max.",
+  "_note": "These preset names point at providers available at time of writing. Re-check with orchestrator_capabilities on your machine before trusting them; add a preset for any new provider the same way. Claude models run through claudeAgent (your Claude subscription), not through OpenCode. Keep implementer and reviewer on different vendors when you can, so the reviewer does not share the implementer's blind spots."
 }
