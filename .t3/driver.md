@@ -50,11 +50,17 @@ matter:
   nudge, never a merge decision — read the PR yourself.
 - `t3_pending_request` — a worker's question or approval blocks it and surfaces
   here; answer it, or hand it to the human.
+- `t3_thread_send` — message a worker's thread. Sending a fix round to an
+  implementer is a follow-up to its `childThreadId` with `mode: "queue"`; it
+  continues the same thread, context and worktree. `freshContext: true` is the
+  only way to drop that context — almost never what you want.
+- `t3_thread_organize` — settle (or pin, archive) a thread by id. You settle a
+  reviewer right after it comments, and an implementer right after its PR merges.
 - `orchestrator_capabilities` — the providers, models and options actually
   available for `delegate_task` on this machine. Re-check it when a dispatch
   fails to launch.
-- `t3_thread_read` / `t3_thread_send` — read or message a thread (e.g. the
-  worker's child thread) when you need its context.
+- `t3_thread_read` — read a thread (e.g. a worker's child thread) when you need
+  its context.
 
 ## Environment facts
 
@@ -96,12 +102,15 @@ the human before dispatching.
 ## Limits
 
 - Max **4 concurrent slices**.
-- **One active worker per slice** — implementer *or* reviewer, never both. Every
-  T3 dispatch is a fresh worktree, so a fix round is a fresh dispatch, not a
-  reused terminal.
+- **One active worker per slice** — implementer *or* reviewer, never both. The
+  implementer is one durable thread for the slice's whole life; a reviewer is a
+  fresh thread per round.
 - Max **3 implement-then-review rounds** per slice.
-- Keep the implementer's child thread alive (do not `task_cancel` it) until the
-  review approves. Release it after merge.
+- **The implementer is durable until merge.** Keep its `childThreadId` for the
+  slice's lifetime; send fix rounds as follow-ups, never a fresh dispatch. Do not
+  settle or cancel it until its PR merges.
+- **Reviewers are disposable.** Settle a reviewer as soon as it posts its
+  `**[reviewer]** VERDICT:` comment; its worktree is then reclaimable.
 - A worker being quiet for a while is normal: slices run 30-120 minutes, and T3
   wakes you on completion. Never cancel a worker for being quiet.
 
@@ -115,10 +124,12 @@ slice's state in your journal until the wake arrives, then:
    `task_status` to read the summary if you need it again).
 2. For an implementer: confirm a PR exists with `Closes #<N>` and an
    `**[implementer]**` comment ticks every acceptance criterion with evidence.
-   Then link and watch the PR, and dispatch the reviewer.
+   Then link and watch the PR, and dispatch the reviewer. Keep the implementer's
+   `childThreadId` — it stays alive until merge.
 3. For a reviewer: read the PR's latest `**[reviewer]** VERDICT:` comment (that
-   is the verdict, not the worker message), and act: dispatch the fix, merge, or
-   gate.
+   is the verdict, not the worker message). Settle the reviewer now
+   (`t3_thread_organize` settle on its `childThreadId`), then act on the verdict:
+   send the implementer a fix follow-up, merge, or gate.
 4. For a fix: confirm the findings were addressed and dispatch a fresh reviewer.
 
 Do not end a turn merely because nothing woke you; before returning control, do
@@ -193,10 +204,13 @@ delegate_task({
 })
 ```
 
+Keep the returned `childThreadId` in your journal: it is this slice's
+implementer handle until the PR merges.
+
 Done = the worker's final message reports a PR, a PR exists with `Closes #<N>`,
 and an `**[implementer]**` comment ticks every acceptance criterion with
 evidence. If a piece is missing, send the same worker a follow-up asking for
-exactly that (see "Worker questions" below). It does not count as a round.
+exactly that. It does not count as a round.
 
 **Review** — always a **fresh worktree, every round**. The reviewer's whole
 value is that it does not trust the implementer's environment. The canonical bug
@@ -219,31 +233,35 @@ Tell the implementer to stop every server and stack it started before it
 reports: the reviewer holds a different port block, so a still-running process
 is a live instance of unreviewed code.
 
-After the reviewer finishes, release its worktree via T3's cleanup (reviewer
-worktrees churn up to three times per slice and each holds a port block and
-possibly a Docker volume). Read the verdict from the PR comment, not the worker
-message.
-
-**On `request_changes`** (rounds 1 and 2): dispatch a fresh fix worker that
-checks out the PR branch:
+After the reviewer finishes, settle it immediately — it is done the moment its
+`**[reviewer]** VERDICT:` comment is on the PR:
 
 ```
-delegate_task({
-  task: "You are the implementer for issue #<N>. Sign every GitHub comment
-**[implementer]**. Check out the PR: gh pr checkout <PR> --repo <REPO>. Address
-every numbered finding in the latest **[reviewer]** comment on PR #<PR>. Reply
-under it as **[implementer]** per finding with what changed or why not. Re-tick
-the acceptance criteria on the PR. Push. End your turn with the PR number and
-whether you are done.",
-  title: "fix #<N> r<round>",
-  role: "implementation",
-  isolation: "worktree",
-  mode: "async",
-  target: <roles.implementer preset from workers.json>
+t3_thread_organize({ threadId: <reviewer childThreadId>, action: "settle" })
+```
+
+Reviewer worktrees churn up to three times per slice and each holds a port block
+and possibly a Docker volume; settling marks them reclaimable. Read the verdict
+from the PR comment, not the worker message.
+
+**On `request_changes`** (rounds 1 and 2): **do not re-dispatch** — send the fix
+as a follow-up to the implementer's own thread, so it keeps its context and its
+worktree (it is already on its branch; no `gh pr checkout`):
+
+```
+t3_thread_send({
+  threadId: <implementer childThreadId>,
+  message: "Address every numbered finding in the latest **[reviewer]** comment
+on PR #<PR>. Reply under it as **[implementer]** per finding with what changed or
+why not. Re-tick the acceptance criteria on the PR. Push. End your turn with the
+PR number and whether you are done.",
+  mode: "queue"
 })
 ```
 
-Then a fresh reviewer.
+Keep the PR watched; the implementer's push and comment wake you, and you can
+also read the returned `taskId` with `task_status`. Then dispatch a fresh
+reviewer.
 
 **On `approve`** — merge policy is **not uniform**:
 
@@ -254,9 +272,15 @@ nothing a new user sees first.
 experience, or touches the access model. By the time drift shows up in a
 contract slice, others have built on it.
 
-**After merge**, post a `**[driver]**` comment on the closed issue: what landed,
-the commit, and the **exact commands with expected output** for the human to
-test it locally. Write them to be run, not to be skimmed.
+**After merge**, settle the implementer — the merge is what ends its life:
+
+```
+t3_thread_organize({ threadId: <implementer childThreadId>, action: "settle" })
+```
+
+Then post a `**[driver]**` comment on the closed issue: what landed, the commit,
+and the **exact commands with expected output** for the human to test it locally.
+Write them to be run, not to be skimmed.
 
 ## Worker questions
 
@@ -267,7 +291,8 @@ yourself.
 
 ## Hard rules
 
-- Decide reuse vs `task_cancel` before acting on a delivery.
+- Settle an implementer only after its PR merges; settle a reviewer as soon as
+  it posts its verdict. Never settle or cancel a worker mid-slice.
 - Never merge, push, or edit product code yourself.
 - Never edit the PRD or `.t3/*` outside `local/` — the human owns those.
   That includes `.t3/project.md`: if a worker trips on something it should
